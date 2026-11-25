@@ -498,6 +498,9 @@ static void           i2s_rx_schedule(struct esp_i2s_s *priv,
 static int32_t  i2s_check_mclkfrequency(struct esp_i2s_s *priv);
 static uint32_t i2s_set_datawidth(struct esp_i2s_s *priv);
 static void i2s_set_clock(struct esp_i2s_s *priv);
+#ifdef CONFIG_ARCH_CHIP_ESP32S3
+static void i2s_tx_keep_clocks(struct esp_i2s_s *priv, bool keep);
+#endif
 static int32_t  i2s_getmclkfrequency(struct i2s_dev_s *dev);
 static int32_t  i2s_setmclkfrequency(struct i2s_dev_s *dev,
                                      uint32_t frequency);
@@ -1954,8 +1957,16 @@ static void i2s_configure(struct esp_i2s_s *priv)
                                               I2S_STD_SLOT_BOTH);
             }
 
+          /* In full-duplex mode the receiver shares BCLK and WS with the
+           * transmitter (see i2s_ll_share_bck_ws() above), so it must run
+           * as an internal slave of the transmitter even when the port is
+           * the bus master.  Otherwise the receiver never latches DIN and
+           * only zeros are read.
+           */
+
           i2s_hal_std_set_rx_slot(priv->config->ctx,
-                                  priv->config->role == I2S_ROLE_SLAVE,
+                                  priv->config->role == I2S_ROLE_SLAVE ||
+                                  priv->config->tx_en,
                                   &rx_slot_cfg);
         }
 #ifdef CONFIG_ARCH_CHIP_ESP32S3
@@ -2115,6 +2126,53 @@ static uint32_t i2s_set_datawidth(struct esp_i2s_s *priv)
 }
 
 /****************************************************************************
+ * Name: i2s_tx_keep_clocks
+ *
+ * Description:
+ *   In full-duplex master mode the receiver is an internal slave of the
+ *   transmitter and is clocked by its BCLK and WS.  By default (TX_STOP_EN)
+ *   the transmitter stops driving BCLK and WS whenever its FIFO runs empty,
+ *   i.e. whenever nothing is being played, which stalls capture.  Keep the
+ *   clocks running while a capture stream is active and restore the default
+ *   afterwards.
+ *
+ * Input Parameters:
+ *   priv - Initialized I2S device structure.
+ *   keep - True to keep BCLK and WS running, false to restore the default.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ARCH_CHIP_ESP32S3
+static void i2s_tx_keep_clocks(struct esp_i2s_s *priv, bool keep)
+{
+  int timeout;
+
+  if (!priv->config->tx_en || !priv->config->rx_en ||
+      priv->config->role != I2S_ROLE_MASTER)
+    {
+      return;
+    }
+
+  modifyreg32(I2S_TX_CONF_REG(priv->config->port),
+              keep ? I2S_TX_STOP_EN : 0, keep ? 0 : I2S_TX_STOP_EN);
+
+  /* Latch the new setting into the I2S clock domain.  Use a bounded wait
+   * instead of i2s_ll_tx_update(), see i2s_rx_channel_start().
+   */
+
+  modifyreg32(I2S_TX_CONF_REG(priv->config->port), 0, I2S_TX_UPDATE);
+  timeout = 1000;
+  while ((getreg32(I2S_TX_CONF_REG(priv->config->port)) & I2S_TX_UPDATE) &&
+         --timeout > 0);
+
+  if (timeout == 0)
+    {
+      i2serr("TX update timeout\n");
+    }
+}
+#endif
+
+/****************************************************************************
  * Name: i2s_set_clock
  *
  * Description:
@@ -2188,6 +2246,20 @@ static void i2s_set_clock(struct esp_i2s_s *priv)
                        priv->config->rx_clk_src,
                        NULL);
 #endif /* I2S_HAVE_RX */
+
+#if defined(I2S_HAVE_TX) && defined(I2S_HAVE_RX) && \
+    defined(CONFIG_ARCH_CHIP_ESP32S3)
+  /* i2s_hal_set_rx_clock() binds MCLK to the RX clock.  In full-duplex
+   * master mode the transmitter is the clock master and the receiver an
+   * internal slave, so MCLK must follow the TX clock instead.
+   */
+
+  if (priv->config->tx_en && priv->config->rx_en &&
+      priv->config->role == I2S_ROLE_MASTER)
+    {
+      i2s_ll_mclk_bind_to_tx_clk(priv->config->ctx->dev);
+    }
+#endif
 }
 
 /****************************************************************************
@@ -3171,6 +3243,10 @@ static int i2s_ioctl(struct i2s_dev_s *dev, int cmd, unsigned long arg)
 
           priv->streaming = true;
 
+#ifdef CONFIG_ARCH_CHIP_ESP32S3
+          i2s_tx_keep_clocks(priv, true);
+#endif
+
           ret = OK;
         }
         break;
@@ -3186,6 +3262,10 @@ static int i2s_ioctl(struct i2s_dev_s *dev, int cmd, unsigned long arg)
           i2sinfo("AUDIOIOC_STOP\n");
 
           priv->streaming = false;
+
+#ifdef CONFIG_ARCH_CHIP_ESP32S3
+          i2s_tx_keep_clocks(priv, false);
+#endif
 
 #ifdef I2S_HAVE_RX
           /* Stop the I2S RX channel and DMA to abort any in-progress
