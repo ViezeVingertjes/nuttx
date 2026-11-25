@@ -192,6 +192,16 @@ int esp32s3_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_AXP2101
+  /* Register the AXP2101 battery charger and fuel gauge */
+
+  ret = board_axp2101_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize AXP2101: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_RTC_PCF85063
   /* Use the PCF85063 as the system RTC */
 

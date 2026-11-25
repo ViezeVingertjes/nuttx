@@ -37,6 +37,10 @@ ifeq ($(CONFIG_INPUT_CST92XX),y)
 CSRCS += esp32s3_board_touch.c
 endif
 
+ifeq ($(CONFIG_AXP2101),y)
+CSRCS += esp32s3_board_power.c
+endif
+
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS += esp32s3_buttons.c
 endif

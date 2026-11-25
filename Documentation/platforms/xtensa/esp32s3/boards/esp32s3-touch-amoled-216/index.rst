@@ -190,6 +190,35 @@ flat the Z axis reads about 9.8::
     Object name:sensor_accel0, received:3
     Total number of received Message:3/3
 
+power
+-----
+
+This configuration registers the AXP2101 PMIC as a battery charger at
+``/dev/batt0`` and its fuel gauge at ``/dev/gauge0``, and enables the NSH
+``poweroff`` command, which switches the board off through the AXP2101
+(the PWR key turns it back on).  The power rails are left as the AXP2101
+OTP configures them.  The power-off voltage, below which the AXP2101 turns
+the board off to protect the LiPo battery from deep discharge, is raised
+from the 2.6 V of the OTP to 3.0 V (``CONFIG_AXP2101_VOFF_VOLTAGE``).  The
+battery is charged to 4.2 V with 200 mA, as programmed in the OTP.
+``batterydump`` shows the charger and gauge state::
+
+    nsh> batterydump -t 0 /dev/batt0
+    mask:0, state:3, online:1, health:1, vol:4097, protocol:0
+
+    nsh> batterydump -t 1 /dev/gauge0
+    BATIOC_CURRENT failed -1
+    mask:0, state:3, online:1, vol:4161mV, capacity:100%, current:0mA, temperature:38.7C
+
+Here the battery is full (state 3), USB power is present (online 1) and
+the battery is healthy.  The AXP2101 has no current sense, so the gauge
+does not report a current, and the temperature is that of the AXP2101
+die.  The raw registers can be
+inspected with the ``i2c`` tool, e.g. the chip ID::
+
+    nsh> i2c get -a 34 -r 3
+    READ Bus: 0 Addr: 34 Subaddr: 03 Value: 4a
+
 psram
 -----
 
