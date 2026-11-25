@@ -910,6 +910,26 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
   uint8_t id = priv->config->id;
   uint32_t user1_reg = getreg32(SPI_USER1_REG(id));
   uint32_t user_reg = getreg32(SPI_USER_REG(id));
+  uint8_t addr_lines = priv->addr_lines;
+  uint8_t data_lines = priv->data_lines;
+
+  /* Per-transfer I/O width flags override esp32s3_qspibus_set_attr() */
+
+  if (QSPIMEM_ISQUADDATA(meminfo->flags))
+    {
+      addr_lines = 1;
+      data_lines = 4;
+    }
+  else if (QSPIMEM_ISQUADIO(meminfo->flags))
+    {
+      addr_lines = 4;
+      data_lines = 4;
+    }
+  else if (QSPIMEM_ISDUALIO(meminfo->flags))
+    {
+      addr_lines = 2;
+      data_lines = 2;
+    }
 
   if (QSPIMEM_ISWRITE(meminfo->flags) || QSPIMEM_ISREAD(meminfo->flags))
     {
@@ -985,11 +1005,11 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
 
       user_reg |= SPI_USR_MOSI_M;
 
-      if (priv->data_lines == 2)
+      if (data_lines == 2)
         {
           user_reg |= SPI_FWRITE_DUAL_M;
         }
-      else if (priv->data_lines == 4)
+      else if (data_lines == 4)
         {
           user_reg |= SPI_FWRITE_QUAD_M;
         }
@@ -1037,22 +1057,22 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
       regval |= SPI_FCMD_QUAD_M;
     }
 
-  if (priv->addr_lines == 2)
+  if (addr_lines == 2)
     {
       regval |= SPI_FADDR_DUAL_M;
     }
-  else if (priv->addr_lines == 4)
+  else if (addr_lines == 4)
     {
       regval |= SPI_FADDR_QUAD_M;
     }
 
   if (QSPIMEM_ISREAD(meminfo->flags))
     {
-      if (priv->data_lines == 2)
+      if (data_lines == 2)
         {
           regval |= SPI_FREAD_DUAL_M;
         }
-      else if (priv->data_lines == 4)
+      else if (data_lines == 4)
         {
           regval |= SPI_FREAD_QUAD_M;
         }
