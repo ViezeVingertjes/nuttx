@@ -151,6 +151,10 @@ Temperature Scale Factor (LSB/°C):
 Data Conversion
 ===============
 
+The uORB topics already publish physical units as defined by
+``<nuttx/uorb.h>``: acceleration in m/s^2 and angular rate in rad/s.  The
+scale factors below apply to raw register values.
+
 To convert raw sensor data to physical units:
 
 .. code-block:: c

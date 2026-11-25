@@ -38,6 +38,7 @@
 #include <nuttx/sensors/qmi8658.h>
 #include <nuttx/debug.h>
 #include <errno.h>
+#include <math.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -48,6 +49,13 @@
 #ifdef CONFIG_SENSORS_USE_B16
 #  error fixed-point data type not supported yet
 #endif
+
+/* Unit conversions: uORB reports acceleration in m/s^2 and angular rate
+ * in rad/s, while the sensor scale factors are in LSB/g and LSB/dps.
+ */
+
+#define QMI8658_G_TO_MS2          (9.80665f)
+#define QMI8658_DPS_TO_RADS       ((float)M_PI / 180.0f)
 
 /* QMI8658 Register Addresses */
 #define QMI8658_REG_WHOAMI        (0x00)  /* Chip ID register */
@@ -1255,6 +1263,7 @@ static int qmi8658_read_imu(FAR struct qmi8658_dev_s *dev,
                             FAR struct sensor_gyro *gyro)
 {
   struct qmi8658_scale_factors_s scale_factors;
+  float scale;
   int16_t accel_data[3];
   int16_t gyro_data[3];
   int16_t temperature;
@@ -1289,9 +1298,12 @@ static int qmi8658_read_imu(FAR struct qmi8658_dev_s *dev,
           return ret;
         }
 
-      accel->x = (float)accel_data[0] / scale_factors.acc_scale;
-      accel->y = (float)accel_data[1] / scale_factors.acc_scale;
-      accel->z = (float)accel_data[2] / scale_factors.acc_scale;
+      /* uORB reports acceleration in m/s^2 */
+
+      scale = QMI8658_G_TO_MS2 / scale_factors.acc_scale;
+      accel->x = (float)accel_data[0] * scale;
+      accel->y = (float)accel_data[1] * scale;
+      accel->z = (float)accel_data[2] * scale;
       accel->temperature = (float)temperature / scale_factors.temp_scale;
       accel->timestamp = sensor_get_timestamp();
     }
@@ -1306,9 +1318,12 @@ static int qmi8658_read_imu(FAR struct qmi8658_dev_s *dev,
           return ret;
         }
 
-      gyro->x = (float)gyro_data[0] / scale_factors.gyro_scale;
-      gyro->y = (float)gyro_data[1] / scale_factors.gyro_scale;
-      gyro->z = (float)gyro_data[2] / scale_factors.gyro_scale;
+      /* uORB reports angular rate in rad/s */
+
+      scale = QMI8658_DPS_TO_RADS / scale_factors.gyro_scale;
+      gyro->x = (float)gyro_data[0] * scale;
+      gyro->y = (float)gyro_data[1] * scale;
+      gyro->z = (float)gyro_data[2] * scale;
       gyro->temperature = (float)temperature / scale_factors.temp_scale;
       gyro->timestamp = sensor_get_timestamp();
     }
