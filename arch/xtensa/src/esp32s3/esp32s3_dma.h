@@ -309,6 +309,26 @@ int esp32s3_dma_get_desc_addr(int chan, bool tx);
 void esp32s3_dma_enable(int chan, bool tx);
 
 /****************************************************************************
+ * Name: esp32s3_dma_append
+ *
+ * Description:
+ *   Make the DMA channel aware of descriptors that were appended to the
+ *   tail of its active descriptor list.  If the channel had already
+ *   stopped at the old tail, it resumes from that descriptor's next
+ *   pointer; otherwise this has no effect.
+ *
+ * Input Parameters:
+ *   chan - DMA channel
+ *   tx   - true: TX mode; false: RX mode
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void esp32s3_dma_append(int chan, bool tx);
+
+/****************************************************************************
  * Name: esp32s3_dma_disable
  *
  * Description:
