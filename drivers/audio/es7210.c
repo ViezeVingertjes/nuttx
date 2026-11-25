@@ -577,6 +577,14 @@ static int es7210_start(FAR struct audio_lowerhalf_s *dev)
   I2S_IOCTL(priv->i2s, AUDIOIOC_START, 0);
   I2S_RXCHANNELS(priv->i2s, priv->nchannels);
   I2S_RXDATAWIDTH(priv->i2s, priv->bpsamp);
+
+  /* The ES7210 clock dividers are programmed for MCLK = 256 * FS (see
+   * es7210_reset()).  Request that MCLK explicitly, otherwise
+   * the I2S lower half is free to pick another multiple (e.g. 128 * FS),
+   * and the ADC then runs at the wrong rate relative to LRCK.
+   */
+
+  I2S_SETMCLKFREQUENCY(priv->i2s, priv->samprate * ES7210_MCLK_MULTIPLE);
   I2S_RXSAMPLERATE(priv->i2s, priv->samprate);
 
   /* Wait for the ES7210 codec to start outputting valid I2S data.
