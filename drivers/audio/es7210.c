@@ -280,7 +280,13 @@ static int es7210_reset(FAR struct es7210_dev_s *priv)
    */
 
   es7210_writereg(priv, ES7210_ADC_OSR_REG07, 0x20);
-  es7210_writereg(priv, ES7210_MCLK_CTL_REG02, ES7210_MCLK_ADC_DIV1_DLL);
+
+  /* With MCLK = 256 * FS the ADC needs the clock doubler, otherwise it
+   * runs at FS / 2 and every sample is sent twice on the I2S bus (see the
+   * Everest coefficient table: ADC_DIV=1, doubler=1, DLL=1 for 256 * FS).
+   */
+
+  es7210_writereg(priv, ES7210_MCLK_CTL_REG02, ES7210_MCLK_DIV1_DBL_DLL);
   es7210_writereg(priv, ES7210_MST_LRCDIVH_REG04,
                  (uint8_t)((lrck_div >> 8) & 0xff));
   es7210_writereg(priv, ES7210_MST_LRCDIVL_REG05,

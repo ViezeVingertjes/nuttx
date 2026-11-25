@@ -155,7 +155,7 @@
 
 /* MCLK / clock */
 
-#define ES7210_MCLK_ADC_DIV1_DLL    0x81 /* ADC_DIV=1, DLL enable */
+#define ES7210_MCLK_DIV1_DBL_DLL    0xc1 /* ADC_DIV=1, doubler, DLL on */
 #define ES7210_DLL_POWER_DOWN       0x04 /* DLL power down */
 
 /* Mute control */
