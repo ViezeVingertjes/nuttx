@@ -850,6 +850,36 @@ static int IRAM_ATTR i2s_txdma_start(struct esp_i2s_s *priv)
 {
   struct esp_buffer_s *bfcontainer;
 
+#ifdef CONFIG_ARCH_CHIP_ESP32S3
+  /* If a transmission is already in progress, append the pending buffers
+   * to the tail of its descriptor list, so that the DMA flows from one
+   * buffer into the next.  Stopping and restarting the transmitter between
+   * buffers underruns the FIFO and causes audible clicks.
+   */
+
+  if (!sq_empty(&priv->tx.act))
+    {
+      while (!sq_empty(&priv->tx.pend))
+        {
+          struct esp_buffer_s *tail;
+          struct esp_dmadesc_s *desc;
+
+          tail = (struct esp_buffer_s *)sq_tail(&priv->tx.act);
+          for (desc = tail->dma_link; desc->next != NULL; desc = desc->next)
+            {
+            }
+
+          bfcontainer = (struct esp_buffer_s *)sq_remfirst(&priv->tx.pend);
+          desc->next = bfcontainer->dma_link;
+          sq_addlast((sq_entry_t *)bfcontainer, &priv->tx.act);
+        }
+
+      /* Resume the DMA in case it already stopped at the old tail */
+
+      esp32s3_dma_append(priv->dma_channel, true);
+      return OK;
+    }
+#else
   /* If there is already an active transmission in progress, then bail
    * returning success.
    */
@@ -858,6 +888,7 @@ static int IRAM_ATTR i2s_txdma_start(struct esp_i2s_s *priv)
     {
       return OK;
     }
+#endif
 
   /* If there are no pending transfer, then bail returning success */
 
@@ -1139,6 +1170,15 @@ static IRAM_ATTR int i2s_txdma_setup(struct esp_i2s_s *priv,
 
   apb_free(bfcontainer->apb);
 
+  /* The buffer may be in PSRAM, which the DMA reads behind the data
+   * cache: write the samples back before the transfer.
+   */
+
+#ifdef CONFIG_ARCH_DCACHE
+  up_clean_dcache((uintptr_t)bfcontainer->buf,
+                  (uintptr_t)bfcontainer->buf + bfcontainer->nbytes);
+#endif
+
   /* Configure DMA stream */
 
 #ifdef CONFIG_ARCH_CHIP_ESP32S3
@@ -1298,47 +1338,53 @@ static void IRAM_ATTR i2s_tx_schedule(struct esp_i2s_s *priv,
 
   if (!sq_empty(&priv->tx.act))
     {
-      /* Remove the next buffer container from the tx.act list */
+      struct esp_buffer_s *last = NULL;
+      sq_entry_t *entry;
 
-      bfcontainer = (struct esp_buffer_s *)sq_peek(&priv->tx.act);
-
-      /* Check if the DMA descriptor that generated an EOF interrupt is the
-       * last descriptor of the current buffer container's DMA outlink.
-       * REVISIT: what to do if we miss synchronization and the descriptor
-       * that generated the interrupt is different from the expected (the
-       * oldest of the list containing active transmissions)?
+      /* Find the active buffer container whose last DMA descriptor
+       * generated this EOF interrupt.  Buffers are chained, so a single
+       * interrupt may also cover older buffers whose EOF was coalesced:
+       * every buffer up to and including that one has been sent.
        */
 
-      /* Find the last descriptor of the current buffer container */
-
-      bfdesc = bfcontainer->dma_link;
-      bfdesc_ctrl = (dma_descriptor_t *)bfdesc;
-      while (bfdesc->next != NULL && !(bfdesc_ctrl->dw0.suc_eof))
+      for (entry = sq_peek(&priv->tx.act); entry != NULL;
+           entry = sq_next(entry))
         {
-          bfdesc = bfdesc->next;
+          bfcontainer = (struct esp_buffer_s *)entry;
+          bfdesc = bfcontainer->dma_link;
           bfdesc_ctrl = (dma_descriptor_t *)bfdesc;
+          while (bfdesc->next != NULL && !(bfdesc_ctrl->dw0.suc_eof))
+            {
+              bfdesc = bfdesc->next;
+              bfdesc_ctrl = (dma_descriptor_t *)bfdesc;
+            }
+
+          if (bfdesc == outlink)
+            {
+              last = bfcontainer;
+              break;
+            }
         }
 
-      if (bfdesc == outlink)
+      if (last != NULL)
         {
-          sq_remfirst(&priv->tx.act);
+          do
+            {
+              /* Report the result of the transfer and move the buffer
+               * container to the tail of the tx.done queue.
+               */
 
-          /* Report the result of the transfer */
+              bfcontainer = (struct esp_buffer_s *)
+                            sq_remfirst(&priv->tx.act);
+              bfcontainer->result = OK;
+              sq_addlast((sq_entry_t *)bfcontainer, &priv->tx.done);
+            }
+          while (bfcontainer != last);
 
-          bfcontainer->result = OK;
-
-          /* Add the completed buffer container to the tail of the tx.done
-           * queue
-           */
-
-          sq_addlast((sq_entry_t *)bfcontainer, &priv->tx.done);
-
-          /* Check if the DMA is IDLE */
+          /* If the DMA is now idle, start the next transfer */
 
           if (sq_empty(&priv->tx.act))
             {
-              /* Then start the next DMA. */
-
               i2s_txdma_start(priv);
             }
         }
@@ -2133,8 +2179,9 @@ static uint32_t i2s_set_datawidth(struct esp_i2s_s *priv)
  *   transmitter and is clocked by its BCLK and WS.  By default (TX_STOP_EN)
  *   the transmitter stops driving BCLK and WS whenever its FIFO runs empty,
  *   i.e. whenever nothing is being played, which stalls capture.  Keep the
- *   clocks running while a capture stream is active and restore the default
- *   afterwards.
+ *   clocks running from AUDIOIOC_START until AUDIOIOC_STOP and restore the
+ *   default afterwards.  These ioctls reach the I2S driver from the capture
+ *   codec drivers (e.g. ES7210), playback drivers do not forward them.
  *
  * Input Parameters:
  *   priv - Initialized I2S device structure.
@@ -2313,8 +2360,14 @@ static void i2s_tx_channel_start(struct esp_i2s_s *priv)
       up_enable_irq(priv->tx_irq);
 
 #ifdef CONFIG_ARCH_CHIP_ESP32S3
+      /* Interrupt at the end of every buffer (the last descriptor of each
+       * buffer has its EOF flag set), not only at the end of the whole
+       * descriptor list, so that buffers chained behind each other are
+       * completed and refilled while the next one is being transmitted.
+       */
+
       esp32s3_dma_enable_interrupt(priv->dma_channel, true,
-                                   GDMA_LL_EVENT_TX_TOTAL_EOF |
+                                   GDMA_LL_EVENT_TX_EOF |
                                    GDMA_LL_EVENT_TX_DESC_ERROR,
                                    true);
 #else
@@ -2599,7 +2652,7 @@ static int i2s_interrupt(int irq, void *context, void *arg)
   esp32s3_dma_clear_interrupt(priv->dma_channel, true, status);
   if (priv->config->tx_en)
     {
-      if (status & GDMA_LL_EVENT_TX_TOTAL_EOF)
+      if (status & GDMA_LL_EVENT_TX_EOF)
         {
           cur = (struct esp_dmadesc_s *)
                 esp32s3_dma_get_desc_addr(priv->dma_channel, true);
