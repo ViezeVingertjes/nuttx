@@ -14,6 +14,10 @@ if(CONFIG_ESP32S3_SPI)
   list(APPEND SRCS esp32s3_board_spi.c)
 endif()
 
+if(CONFIG_RTC_PCF85063)
+  list(APPEND SRCS esp32s3_board_rtc.c)
+endif()
+
 if(CONFIG_ARCH_BUTTONS)
   list(APPEND SRCS esp32s3_buttons.c)
 endif()

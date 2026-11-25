@@ -29,6 +29,10 @@ ifeq ($(CONFIG_ESP32S3_SPI),y)
 CSRCS += esp32s3_board_spi.c
 endif
 
+ifeq ($(CONFIG_RTC_PCF85063),y)
+CSRCS += esp32s3_board_rtc.c
+endif
+
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS += esp32s3_buttons.c
 endif

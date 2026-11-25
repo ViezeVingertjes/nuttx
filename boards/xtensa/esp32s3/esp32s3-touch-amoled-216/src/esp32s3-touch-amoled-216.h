@@ -158,5 +158,20 @@ int board_spiflash_init(void);
 int esp32s3_qmi8658_initialize(void);
 #endif
 
+/****************************************************************************
+ * Name: board_pcf85063_initialize
+ *
+ * Description:
+ *   Bring up the PCF85063 external RTC and load the system time from it.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_RTC_PCF85063
+int board_pcf85063_initialize(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_XTENSA_ESP32S3_ESP32S3_TOUCH_AMOLED_216_SRC_ESP32S3_TOUCH_AMOLED_216_H */

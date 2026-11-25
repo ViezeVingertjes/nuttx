@@ -192,6 +192,16 @@ int esp32s3_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_RTC_PCF85063
+  /* Use the PCF85063 as the system RTC */
+
+  ret = board_pcf85063_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize PCF85063: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_SENSORS_QMI8658
   /* Register the QMI8658 IMU as uORB accelerometer and gyroscope */
 

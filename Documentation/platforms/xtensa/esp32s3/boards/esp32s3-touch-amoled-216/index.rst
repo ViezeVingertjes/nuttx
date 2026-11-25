@@ -201,6 +201,26 @@ used to exercise it::
           total       used       free    maxused    maxfree  nused  nfree name
         8775692      23020    8752672      23400    8388592     75      4 Umem
 
+rtc
+---
+
+This configuration uses the on-board PCF85063, which has its own backup
+supply, as the system real time clock.  The system time is loaded from it
+at boot and ``date -s`` writes it back::
+
+    nsh> date -s "Nov 25 16:55:35 2026"
+    nsh> date
+    Wed, Nov 25 16:55:36 2026
+
+After a reset, the time is still correct::
+
+    nsh> date
+    Wed, Nov 25 16:55:47 2026
+
+The PCF85063 provides the system RTC interface itself, so this
+configuration cannot be combined with ``CONFIG_RTC_DRIVER``, which
+registers the ESP32-S3 internal RTC instead.
+
 sdmmc
 -----
 
