@@ -171,6 +171,25 @@ nsh
 Basic NuttShell configuration (console enabled on the USB Serial/JTAG
 controller).
 
+qmi8658
+-------
+
+This configuration registers the QMI8658 6-axis IMU through the uORB
+sensor framework, as ``/dev/uorb/sensor_accel0`` and
+``/dev/uorb/sensor_gyro0``.  The ``uorb_listener`` application can be used
+to read it.  Acceleration is reported in m/s^2, so with the board lying
+flat the Z axis reads about 9.8::
+
+    nsh> uorb_listener -n 3 sensor_accel0
+
+    Monitor objects num:1
+    object_name:sensor_accel, object_instance:0
+    sensor_accel(now:6660000):timestamp:6660000,x:0.221464,y:0.216675,z:9.764751,temperature:35.015625
+    sensor_accel(now:7670000):timestamp:7670000,x:0.228646,y:0.191536,z:9.779117,temperature:35.007812
+    sensor_accel(now:8680000):timestamp:8680000,x:0.178368,y:0.135272,z:9.941922,temperature:35.015625
+    Object name:sensor_accel0, received:3
+    Total number of received Message:3/3
+
 psram
 -----
 
