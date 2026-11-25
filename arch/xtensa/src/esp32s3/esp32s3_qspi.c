@@ -37,6 +37,7 @@
 #include <time.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/cache.h>
 #include <nuttx/irq.h>
 #include <nuttx/clock.h>
 #include <nuttx/mutex.h>
@@ -437,6 +438,29 @@ static struct esp32s3_qspi_priv_s esp32s3_spi3_priv =
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: esp32s3_qspi_id
+ *
+ * Description:
+ *   Return the SPI peripheral number of the QSPI bus.  Only SPI2 and SPI3
+ *   can operate as QSPI masters.  Derive the number so that the compiler
+ *   can tell, which lets it see that REG_SPI_BASE() never yields the null
+ *   address it uses for SPI0/SPI1 (avoiding spurious -Warray-bounds
+ *   warnings).
+ *
+ ****************************************************************************/
+
+static inline uint8_t esp32s3_qspi_id(struct esp32s3_qspi_priv_s *priv)
+{
+  uint8_t id = priv->config->id;
+
+  DEBUGASSERT(id == 2 || id == 3);
+
+  /* Same value for SPI2 and SPI3, but provably never 0 or 1 */
+
+  return 2 + (id & 1);
+}
+
+/****************************************************************************
  * Name: esp32s3_qspi_lock
  *
  * Description:
@@ -582,7 +606,7 @@ static uint32_t esp32s3_qspi_setfrequency(struct qspi_dev_s *dev,
 
   priv->frequency = frequency;
 
-  putreg32(regval, SPI_CLOCK_REG(priv->config->id));
+  putreg32(regval, SPI_CLOCK_REG(esp32s3_qspi_id(priv)));
 
   spiinfo("frequency=%" PRIu32 ", actual=%" PRIu32 "\n",
           priv->frequency, priv->actual);
@@ -610,7 +634,7 @@ static void esp32s3_qspi_setmode(struct qspi_dev_s *dev,
 {
   uint32_t regval;
   struct esp32s3_qspi_priv_s *priv = (struct esp32s3_qspi_priv_s *)dev;
-  uint8_t id = priv->config->id;
+  uint8_t id = esp32s3_qspi_id(priv);
 
   spiinfo("mode=%d\n", mode);
 
@@ -650,12 +674,12 @@ static void esp32s3_qspi_setmode(struct qspi_dev_s *dev,
         }
 
       regval  = getreg32(SPI_MISC_REG(id));
-      regval &= SPI_CK_IDLE_EDGE_M;
+      regval &= ~SPI_CK_IDLE_EDGE_M;
       regval |= ck_idle_edge << SPI_CK_IDLE_EDGE_S;
       putreg32(regval, SPI_MISC_REG(id));
 
       regval  = getreg32(SPI_USER_REG(id));
-      regval &= SPI_CK_OUT_EDGE_M;
+      regval &= ~SPI_CK_OUT_EDGE_M;
       regval |= ck_out_edge << SPI_CK_OUT_EDGE_S;
       putreg32(regval, SPI_USER_REG(id));
 
@@ -708,7 +732,7 @@ static int esp32s3_qspi_command(struct qspi_dev_s *dev,
   uint32_t regval;
   uint8_t *data;
   struct esp32s3_qspi_priv_s *priv = (struct esp32s3_qspi_priv_s *)dev;
-  uint8_t id = priv->config->id;
+  uint8_t id = esp32s3_qspi_id(priv);
   uint32_t user1_reg = getreg32(SPI_USER1_REG(id));
   uint32_t user_reg = getreg32(SPI_USER_REG(id));
 
@@ -907,11 +931,12 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
 #ifdef CONFIG_ESP32S3_SPI_DMA
   uint32_t regval;
   struct esp32s3_qspi_priv_s *priv = (struct esp32s3_qspi_priv_s *)dev;
-  uint8_t id = priv->config->id;
+  uint8_t id = esp32s3_qspi_id(priv);
   uint32_t user1_reg = getreg32(SPI_USER1_REG(id));
   uint32_t user_reg = getreg32(SPI_USER_REG(id));
   uint8_t addr_lines = priv->addr_lines;
   uint8_t data_lines = priv->data_lines;
+  int ret;
 
   /* Per-transfer I/O width flags override esp32s3_qspibus_set_attr() */
 
@@ -929,6 +954,22 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
     {
       addr_lines = 2;
       data_lines = 2;
+    }
+
+  /* A PSRAM receive buffer is invalidated in the data cache before and
+   * after the transfer, which works on whole cache lines: it must not
+   * share a line with other data.
+   */
+
+  if (QSPIMEM_ISREAD(meminfo->flags) && esp32s3_ptr_extram(meminfo->buffer))
+    {
+      size_t linesize = up_get_dcache_linesize();
+
+      if (((uintptr_t)meminfo->buffer % linesize) != 0 ||
+          (meminfo->buflen % linesize) != 0)
+        {
+          return -EINVAL;
+        }
     }
 
   if (QSPIMEM_ISWRITE(meminfo->flags) || QSPIMEM_ISREAD(meminfo->flags))
@@ -954,7 +995,8 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
 
   /* Initialize QSPI user register */
 
-  user_reg &= ~(SPI_USR_MOSI_M |
+  user_reg &= ~(SPI_USR_ADDR_M |
+                SPI_USR_MOSI_M |
                 SPI_USR_MISO_M |
                 SPI_USR_DUMMY_M |
                 SPI_FWRITE_DUAL_M |
@@ -1014,6 +1056,16 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
           user_reg |= SPI_FWRITE_QUAD_M;
         }
 
+      /* The DMA reads PSRAM behind the data cache: write back any data
+       * still held in the cache.
+       */
+
+      if (esp32s3_ptr_extram(meminfo->buffer))
+        {
+          up_clean_dcache((uintptr_t)meminfo->buffer,
+                          (uintptr_t)meminfo->buffer + meminfo->buflen);
+        }
+
       esp32s3_dma_setup(priv->dma_desc,
                         QSPI_DMA_DESC_NUM,
                         (uint8_t *)meminfo->buffer,
@@ -1029,6 +1081,18 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
       putreg32(regval, SPI_DMA_CONF_REG(id));
 
       user_reg |= SPI_USR_MISO_M;
+
+      /* Drop the cache lines of a PSRAM receive buffer before the DMA
+       * writes PSRAM, so that no dirty line is written back over the
+       * received data during the transfer.  The buffer is line aligned.
+       */
+
+      if (esp32s3_ptr_extram(meminfo->buffer))
+        {
+          up_invalidate_dcache((uintptr_t)meminfo->buffer,
+                               (uintptr_t)meminfo->buffer +
+                               meminfo->buflen);
+        }
 
       esp32s3_dma_setup(priv->dma_desc,
                         QSPI_DMA_DESC_NUM,
@@ -1104,15 +1168,24 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
 
   /* Wait for transmission done */
 
-  esp32s3_qspi_wait_sem(priv);
+  ret = esp32s3_qspi_wait_sem(priv);
 
   /* Reset interrupt */
 
   putreg32(0, SPI_DMA_INT_ENA_REG(id));
 
-  return 0;
+  /* Drop stale cache lines covering a PSRAM receive buffer */
+
+  if (ret >= 0 && QSPIMEM_ISREAD(meminfo->flags) &&
+      esp32s3_ptr_extram(meminfo->buffer))
+    {
+      up_invalidate_dcache((uintptr_t)meminfo->buffer,
+                           (uintptr_t)meminfo->buffer + meminfo->buflen);
+    }
+
+  return ret < 0 ? ret : OK;
 #else
-  return -1;
+  return -ENOSYS;
 #endif
 }
 
@@ -1135,7 +1208,31 @@ static int esp32s3_qspi_memory(struct qspi_dev_s *dev,
 static void *esp32s3_qspi_alloc(struct qspi_dev_s *dev, size_t buflen)
 {
 #ifdef CONFIG_ESP32S3_SPI_DMA
-  return kmm_malloc(ALIGN_UP(buflen, 4));
+  /* Prefer internal RAM: DMA from it is faster and needs no cache
+   * maintenance.  Otherwise fall back to a cache line aligned buffer,
+   * which qspi_memory() handles in PSRAM too.
+   */
+
+  size_t linesize = up_get_dcache_linesize();
+  void *buffer;
+
+#  ifdef CONFIG_XTENSA_IMEM_USE_SEPARATE_HEAP
+  buffer = xtensa_imm_malloc(ALIGN_UP(buflen, 4));
+#  else
+  buffer = kmm_malloc(ALIGN_UP(buflen, 4));
+  if (buffer != NULL && esp32s3_ptr_extram(buffer))
+    {
+      kmm_free(buffer);
+      buffer = NULL;
+    }
+#  endif
+
+  if (buffer == NULL)
+    {
+      buffer = kmm_memalign(linesize, ALIGN_UP(buflen, linesize));
+    }
+
+  return buffer;
 #else
   return NULL;
 #endif
@@ -1161,6 +1258,14 @@ static void esp32s3_qspi_free(struct qspi_dev_s *dev, void *buffer)
 #ifdef CONFIG_ESP32S3_SPI_DMA
   if (buffer)
     {
+#  ifdef CONFIG_XTENSA_IMEM_USE_SEPARATE_HEAP
+      if (xtensa_imm_heapmember(buffer))
+        {
+          xtensa_imm_free(buffer);
+          return;
+        }
+#  endif
+
       kmm_free(buffer);
     }
 #endif
@@ -1226,7 +1331,7 @@ static int esp32s3_qspi_init_dma(struct esp32s3_qspi_priv_s *priv)
   /* Disable segment transaction mode for QSPI Master */
 
   putreg32((SPI_SLV_RX_SEG_TRANS_CLR_EN_M | SPI_SLV_TX_SEG_TRANS_CLR_EN_M),
-           SPI_DMA_CONF_REG(config->id));
+           SPI_DMA_CONF_REG(esp32s3_qspi_id(priv)));
 
   return OK;
 }
@@ -1394,7 +1499,7 @@ static void esp32s3_qspi_init_gpio(struct esp32s3_qspi_priv_s *priv)
 static int esp32s3_qspi_init(struct esp32s3_qspi_priv_s *priv)
 {
   const struct esp32s3_qspi_config_s *config = priv->config;
-  uint8_t id = config->id;
+  uint8_t id = esp32s3_qspi_id(priv);
 
   esp32s3_qspi_init_gpio(priv);
 
@@ -1485,7 +1590,8 @@ static int esp32s3_qspi_interrupt(int irq, void *context, void *arg)
 
   /* Write 1 to clear interrupt bit */
 
-  putreg32(SPI_TRANS_DONE_INT_CLR_M, SPI_DMA_INT_CLR_REG(priv->config->id));
+  putreg32(SPI_TRANS_DONE_INT_CLR_M,
+           SPI_DMA_INT_CLR_REG(esp32s3_qspi_id(priv)));
 
   nxsem_post(&priv->sem_isr);
 
@@ -1573,7 +1679,7 @@ int esp32s3_qspibus_set_delay(struct qspi_dev_s *dev,
                               uint8_t dout_mode)
 {
   struct esp32s3_qspi_priv_s *priv = (struct esp32s3_qspi_priv_s *)dev;
-  uint8_t id = priv->config->id;
+  uint8_t id = esp32s3_qspi_id(priv);
 
   if ((din_mode > 3) || (din_num > 3) || (dout_mode > 1))
     {
