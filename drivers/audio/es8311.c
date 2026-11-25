@@ -681,6 +681,18 @@ static int es8311_setsamplerate(FAR struct es8311_dev_s *priv)
   int coeff_index;
   int ret;
 
+  /* When the codec is clocked from the MCLK pin, ask the I2S lower half
+   * for MCLK = 256 * FS before looking up the coefficients.  Otherwise the
+   * MCLK left over from the previous sample rate is used, and a rate change
+   * (e.g. 44.1 kHz -> 48 kHz) fails because that combination is not in the
+   * coefficient table.
+   */
+
+  if (es8311_get_mclk_src() == ES8311_MCLK_FROM_MCLK_PIN)
+    {
+      I2S_SETMCLKFREQUENCY(priv->i2s, priv->samprate * 256);
+    }
+
   priv->mclk = I2S_GETMCLKFREQUENCY(priv->i2s);
   coeff_index = es8311_getcoeff(priv, priv->samprate);
 
