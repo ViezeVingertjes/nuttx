@@ -1596,17 +1596,35 @@ static int es8311_stop(FAR struct audio_lowerhalf_s *dev)
   ret |= es8311_writereg(priv, ES8311_DAC_REG37,    0x08);
   ret |= es8311_writereg(priv, ES8311_GP_REG45,     0x01);
 
-  /* Send a message to stop all audio streaming */
+  /* Tell the worker thread to stop all audio streaming.  If the stream
+   * already ended by itself, the worker thread has exited and closed the
+   * message queue (under pendlock), so there is nobody left to tell.
+   *
+   * Do not block on a full queue while holding pendlock, the worker needs
+   * it to drain the queue.  The worker checks 'terminating' every time it
+   * wakes up, so the message is only a wake-up: if the queue is full, it
+   * wakes up anyway.
+   */
 
-  term_msg.msg_id = AUDIO_MSG_STOP;
-  term_msg.u.data = 0;
-  file_mq_send(&priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-               CONFIG_ES8311_MSG_PRIO);
+  nxmutex_lock(&priv->pendlock);
+  if (priv->mq.f_inode != NULL)
+    {
+      priv->terminating = true;
+      term_msg.msg_id   = AUDIO_MSG_STOP;
+      term_msg.u.data   = 0;
+      file_mq_ticksend(&priv->mq, (FAR const char *)&term_msg,
+                       sizeof(term_msg), CONFIG_ES8311_MSG_PRIO, 0);
+    }
 
-  /* Join the worker thread */
+  nxmutex_unlock(&priv->pendlock);
 
-  pthread_join(priv->threadid, &value);
-  priv->threadid = 0;
+  /* Join the worker thread, if one was started */
+
+  if (priv->threadid != 0)
+    {
+      pthread_join(priv->threadid, &value);
+      priv->threadid = 0;
+    }
 
   es8311_dump_registers(&priv->dev, "After stop");
 
@@ -1757,12 +1775,17 @@ static int es8311_enqueuebuffer(FAR struct audio_lowerhalf_s *dev,
   /* Add the new buffer to the tail of pending audio buffers */
 
   dq_addlast(&apb->dq_entry, &priv->pendq);
-  nxmutex_unlock(&priv->pendlock);
 
   /* Send a message to the worker thread indicating that a new buffer has
-   * been enqueued. If mq is NULL, then the playing has not yet started.
-   * In that case we are just "priming the pump" and we don't need to send
-   * any message.
+   * been enqueued. If mq is NULL, then the playing has not yet started (or
+   * has already finished).  In that case we are just "priming the pump" and
+   * we don't need to send any message.
+   *
+   * The worker thread closes the message queue under pendlock when it
+   * exits, so check and send while still holding it, but do not block:
+   * the worker needs pendlock to drain the queue.  The message is only a
+   * wake-up, the buffer is already in pendq: if the queue is full, the
+   * worker wakes up anyway and processes it.
    */
 
   ret = OK;
@@ -1771,14 +1794,19 @@ static int es8311_enqueuebuffer(FAR struct audio_lowerhalf_s *dev,
       term_msg.msg_id  = AUDIO_MSG_ENQUEUE;
       term_msg.u.data = 0;
 
-      ret = file_mq_send(&priv->mq, (FAR const char *)&term_msg,
-                         sizeof(term_msg), CONFIG_ES8311_MSG_PRIO);
-      if (ret < 0)
+      ret = file_mq_ticksend(&priv->mq, (FAR const char *)&term_msg,
+                             sizeof(term_msg), CONFIG_ES8311_MSG_PRIO, 0);
+      if (ret == -ETIMEDOUT || ret == -EAGAIN)
+        {
+          ret = OK;
+        }
+      else if (ret < 0)
         {
           auderr("file_mq_send failed: %d\n", ret);
         }
     }
 
+  nxmutex_unlock(&priv->pendlock);
   return ret;
 }
 
@@ -2141,10 +2169,14 @@ static void *es8311_workerthread(pthread_addr_t pvarg)
 
   es8311_returnbuffers(priv);
 
-  /* Close the message queue */
+  /* Close the message queue.  Do it under pendlock: es8311_stop() and
+   * es8311_enqueuebuffer() check whether it is still open before sending.
+   */
 
+  nxmutex_lock(&priv->pendlock);
   file_mq_close(&priv->mq);
   file_mq_unlink(priv->mqname);
+  nxmutex_unlock(&priv->pendlock);
 
   /* Send an AUDIO_MSG_COMPLETE message to the client */
 
