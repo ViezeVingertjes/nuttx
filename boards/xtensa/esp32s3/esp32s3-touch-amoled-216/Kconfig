@@ -26,4 +26,14 @@
 
 if ARCH_BOARD_ESP32S3_TOUCH_AMOLED_216
 
+config ESP32S3_TOUCH_AMOLED_216_SPEAKER
+	bool "Enable the speaker amplifier"
+	default n
+	depends on AUDIO_ES8311
+	---help---
+		Switch on the speaker power amplifier (GPIO46) when the audio
+		devices are registered.  It is kept off otherwise, so that the
+		speaker stays silent and draws no current unless explicitly
+		wanted.
+
 endif # ARCH_BOARD_ESP32S3_TOUCH_AMOLED_216

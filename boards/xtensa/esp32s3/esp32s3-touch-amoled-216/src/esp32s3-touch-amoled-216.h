@@ -203,5 +203,20 @@ int board_touchscreen_initialize(void);
 int board_axp2101_initialize(void);
 #endif
 
+/****************************************************************************
+ * Name: board_audio_initialize
+ *
+ * Description:
+ *   Register the ES8311 playback and ES7210 capture audio devices.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_AUDIO
+int board_audio_initialize(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_XTENSA_ESP32S3_ESP32S3_TOUCH_AMOLED_216_SRC_ESP32S3_TOUCH_AMOLED_216_H */

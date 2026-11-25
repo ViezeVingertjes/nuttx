@@ -45,6 +45,12 @@ ifeq ($(CONFIG_LCD_CO5300),y)
 CSRCS += esp32s3_board_lcd.c
 endif
 
+ifeq ($(CONFIG_AUDIO_ES8311),y)
+CSRCS += esp32s3_board_audio.c
+else ifeq ($(CONFIG_AUDIO_ES7210),y)
+CSRCS += esp32s3_board_audio.c
+endif
+
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS += esp32s3_buttons.c
 endif

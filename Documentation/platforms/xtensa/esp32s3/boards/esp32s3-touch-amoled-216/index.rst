@@ -128,6 +128,46 @@ Where ``<config_name>`` is the name of the board configuration you want to
 use, e.g. ``nsh``.  To access the console, open ``/dev/ttyACM0`` with a
 serial terminal such as ``picocom`` or ``minicom``.
 
+audio
+-----
+
+This configuration registers the audio devices.  Both codecs share I2S0
+(MCLK GPIO42, BCLK GPIO9, WS GPIO45) in full-duplex mode:
+
+  ====================== ======== ===================================
+  Device                 Codec    Function
+  ====================== ======== ===================================
+  ``/dev/audio/pcm0``    ES8311   Playback, I2S data out on GPIO8
+  ``/dev/audio/pcm_in0`` ES7210   Microphones, I2S data in on GPIO10
+  ====================== ======== ===================================
+
+The ES8311 ADC is not wired to anything on this board, so it is not
+registered as a capture device.  Both devices share the I2S clocks and
+therefore must use the same sample rate.
+
+The speaker power amplifier (GPIO46) is only switched on when
+``CONFIG_ESP32S3_TOUCH_AMOLED_216_SPEAKER`` is enabled, which this
+configuration does.  The microSD card is enabled to hold audio files.  To
+play a WAV file::
+
+    nsh> mount -t vfat /dev/mmcsd0 /mnt
+    nsh> nxplayer
+    nxplayer> device /dev/audio/pcm0
+    nxplayer> play /mnt/ping.wav
+    nxplayer> q
+
+and to record from the microphones (2 channels, 16 bit, 16 kHz)::
+
+    nsh> nxrecorder
+    nxrecorder> device /dev/audio/pcm_in0
+    nxrecorder> recordraw /mnt/rec.pcm 2 16 16000
+    nxrecorder> stop
+    nxrecorder> q
+
+The nxplayer ``tone`` command sends raw PCM without a WAV header, which the
+PCM decoder in front of the ES8311 only accepts with
+``CONFIG_AUDIO_FORMAT_RAW``.
+
 buttons
 -------
 

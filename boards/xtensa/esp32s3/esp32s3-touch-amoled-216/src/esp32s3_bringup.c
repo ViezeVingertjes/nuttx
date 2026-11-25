@@ -282,6 +282,16 @@ int esp32s3_bringup(void)
     }
 #endif
 
+#if defined(CONFIG_AUDIO_ES8311) || defined(CONFIG_AUDIO_ES7210)
+  /* Register the speaker (ES8311) and microphone (ES7210) devices */
+
+  ret = board_audio_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize audio: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_INPUT_BUTTONS
   /* Register the BOOT, IO18 and PWR keys as /dev/buttons */
 
