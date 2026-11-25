@@ -29,6 +29,7 @@ menu "Battery Management Support"
 config BATTERY_CHARGER
 	bool "Battery Charger support"
 	default n
+	select SCHED_LPWORK
 
 config BQ2425X
 	bool "BQ2425X Battery charger support"
@@ -199,6 +200,7 @@ config NPM1100
 config BATTERY_GAUGE
 	bool "Battery Fuel Gauge support"
 	default n
+	select SCHED_LPWORK
 
 config MAX1704X
 	bool "MAX1704X Battery fuel gauge support"
