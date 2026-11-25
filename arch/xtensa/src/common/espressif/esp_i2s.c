@@ -1313,10 +1313,10 @@ static void IRAM_ATTR i2s_tx_schedule(struct esp_i2s_s *priv,
 
       bfdesc = bfcontainer->dma_link;
       bfdesc_ctrl = (dma_descriptor_t *)bfdesc;
-      while (!(bfdesc_ctrl->dw0.suc_eof))
+      while (bfdesc->next != NULL && !(bfdesc_ctrl->dw0.suc_eof))
         {
-          DEBUGASSERT(bfdesc->next);
           bfdesc = bfdesc->next;
+          bfdesc_ctrl = (dma_descriptor_t *)bfdesc;
         }
 
       if (bfdesc == outlink)
