@@ -173,5 +173,20 @@ int esp32s3_qmi8658_initialize(void);
 int board_pcf85063_initialize(void);
 #endif
 
+/****************************************************************************
+ * Name: board_touchscreen_initialize
+ *
+ * Description:
+ *   Register the CST9220 touch controller as /dev/input0.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_INPUT_CST92XX
+int board_touchscreen_initialize(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_XTENSA_ESP32S3_ESP32S3_TOUCH_AMOLED_216_SRC_ESP32S3_TOUCH_AMOLED_216_H */

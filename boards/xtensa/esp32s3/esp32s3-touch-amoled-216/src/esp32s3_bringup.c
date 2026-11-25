@@ -222,6 +222,16 @@ int esp32s3_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_INPUT_CST92XX
+  /* Register the CST9220 touch controller as /dev/input0 */
+
+  ret = board_touchscreen_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize touch: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_INPUT_BUTTONS
   /* Register the BOOT, IO18 and PWR keys as /dev/buttons */
 

@@ -18,6 +18,10 @@ if(CONFIG_RTC_PCF85063)
   list(APPEND SRCS esp32s3_board_rtc.c)
 endif()
 
+if(CONFIG_INPUT_CST92XX)
+  list(APPEND SRCS esp32s3_board_touch.c)
+endif()
+
 if(CONFIG_ARCH_BUTTONS)
   list(APPEND SRCS esp32s3_buttons.c)
 endif()

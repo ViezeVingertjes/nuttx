@@ -239,6 +239,19 @@ before the board boots::
       Filesystem      Size      Used  Available Mounted on
       vfat           3580M     1040K      3579M /mnt
 
+touch
+-----
+
+This configuration registers the CST9220 capacitive touch controller
+(I2C0 address 0x5A, interrupt on GPIO11, reset on GPIO40) as
+``/dev/input0`` and includes the ``tc`` touchscreen example.  At boot the
+driver identifies the controller::
+
+    cst92xx_probe: CST9220: checkcode 0xcaca4e20 fw 0x01000006 resolution 480x480
+    cst92xx_register: Registered /dev/input0, 480x480, 1 points
+
+Run ``tc`` and touch the screen to see the reported coordinates.
+
 wifi
 ----
 
