@@ -65,6 +65,14 @@
 #  include "esp32s3_board_sdmmc.h"
 #endif
 
+#ifdef CONFIG_VIDEO_FB
+#  include <nuttx/video/fb.h>
+#endif
+
+#ifdef CONFIG_LCD_DEV
+#  include <nuttx/lcd/lcd_dev.h>
+#endif
+
 #ifdef CONFIG_ESPRESSIF_WIFI
 #  include "esp32s3_board_wlan.h"
 #endif
@@ -230,6 +238,38 @@ int esp32s3_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize SD card: %d\n", ret);
     }
+#endif
+
+#ifdef CONFIG_LCD_CO5300
+#  ifdef CONFIG_VIDEO_FB
+  /* Register the AMOLED panel as /dev/fb0.  The framebuffer driver calls
+   * board_lcd_initialize() itself.
+   */
+
+  ret = fb_register(0, 0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to register framebuffer: %d\n", ret);
+    }
+#  else
+  ret = board_lcd_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize LCD: %d\n", ret);
+    }
+#    ifdef CONFIG_LCD_DEV
+  else
+    {
+      /* Register the AMOLED panel as /dev/lcd0 */
+
+      ret = lcddev_register(0);
+      if (ret < 0)
+        {
+          syslog(LOG_ERR, "ERROR: lcddev_register() failed: %d\n", ret);
+        }
+    }
+#    endif
+#  endif
 #endif
 
 #ifdef CONFIG_INPUT_CST92XX

@@ -41,6 +41,10 @@ ifeq ($(CONFIG_AXP2101),y)
 CSRCS += esp32s3_board_power.c
 endif
 
+ifeq ($(CONFIG_LCD_CO5300),y)
+CSRCS += esp32s3_board_lcd.c
+endif
+
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS += esp32s3_buttons.c
 endif

@@ -26,6 +26,10 @@ if(CONFIG_AXP2101)
   list(APPEND SRCS esp32s3_board_power.c)
 endif()
 
+if(CONFIG_LCD_CO5300)
+  list(APPEND SRCS esp32s3_board_lcd.c)
+endif()
+
 if(CONFIG_ARCH_BUTTONS)
   list(APPEND SRCS esp32s3_buttons.c)
 endif()

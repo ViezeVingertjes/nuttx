@@ -165,6 +165,41 @@ can be used to inspect the on-board peripherals::
     60: -- -- -- -- -- -- -- -- -- -- -- 6b -- -- -- --
     70: -- -- -- -- -- -- -- --
 
+lcd
+---
+
+This configuration drives the 480x480 AMOLED panel (CO5300 controller) on
+SPI2 in quad mode (QSPI) and exposes it as a framebuffer at ``/dev/fb0``.
+The framebuffer and the driver shadow buffer (used to widen updates to the
+even-aligned areas the panel requires) are allocated from PSRAM, so this
+configuration builds on ``psram``.  The ``fb`` example draws a series of
+nested rectangles::
+
+    nsh> fb
+    VideoInfo:
+          fmt: 11
+         xres: 480
+         yres: 480
+      nplanes: 1
+    PlaneInfo (plane 0):
+        fbmem: 0x3c0c0818
+        fblen: 460800
+       stride: 960
+      display: 0
+          bpp: 16
+    Mapped FB mem: 0x3c0c0818
+     0: (  0,  0) (480,480)
+     1: ( 43, 43) (394,394)
+     2: ( 86, 86) (308,308)
+     3: (129,129) (222,222)
+     4: (172,172) (136,136)
+     5: (215,215) ( 50, 50)
+    Test finished
+
+Note that in this configuration SPI2 and SPI3 use the quad I/O mode of
+the SPI driver, so the microSD card (``sdmmc``) cannot be used at the same
+time.
+
 nsh
 ---
 
