@@ -240,6 +240,32 @@ Note that in this configuration SPI2 and SPI3 use the quad I/O mode of
 the SPI driver, so the microSD card (``sdmmc``) cannot be used at the same
 time.
 
+lvgl
+----
+
+This configuration runs the LVGL widgets demo on the AMOLED panel with
+touch input (CST9220).  LVGL writes directly to the LCD character device
+(``/dev/lcd0``) in partial mode, with a 40-line draw buffer; its rounder
+honours the even-aligned areas the panel requires, so no shadow buffer is
+needed::
+
+    nsh> lvgldemo
+
+The configuration is tuned for drawing speed: ``-O2`` instead of ``-Os``,
+flash in QIO mode at 80 MHz,
+PSRAM at 80 MHz, a 64 KiB data cache with 64-byte lines, 32 KiB QSPI
+transfers sent by the CO5300 transmit thread
+(``CONFIG_LCD_CO5300_TXTHREAD``) and a 1 ms system tick for LVGL's timer.
+With ``CONFIG_LV_USE_DEMO_BENCHMARK`` the ``lvgldemo benchmark`` command
+reports about 20 FPS on average over all scenes; most scenes run at the
+LVGL refresh limit of 30 FPS and are then limited by rendering, not by the
+display bus.
+
+Fast full-screen animations may show tearing: the panel's tearing effect
+(TE) output only goes to a test pad and is not connected to the ESP32-S3,
+so updates cannot be synchronized with the panel refresh.  Sending a full
+frame also takes longer (about 23 ms at 40 MHz) than one panel refresh.
+
 nsh
 ---
 
@@ -287,8 +313,9 @@ battery is charged to 4.2 V with 200 mA, as programmed in the OTP.
 
 Here the battery is full (state 3), USB power is present (online 1) and
 the battery is healthy.  The AXP2101 has no current sense, so the gauge
-does not report a current, and the temperature is that of the AXP2101
-die.  The raw registers can be
+does not report a current: ``batterydump`` prints that the
+``BATIOC_CURRENT`` request failed, which is expected.  The temperature is
+that of the AXP2101 die.  The raw registers can be
 inspected with the ``i2c`` tool, e.g. the chip ID::
 
     nsh> i2c get -a 34 -r 3
