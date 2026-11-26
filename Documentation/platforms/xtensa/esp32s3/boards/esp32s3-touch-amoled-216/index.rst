@@ -319,6 +319,19 @@ Fast full-screen animations may show tearing: the panel's tearing effect
 so updates cannot be synchronized with the panel refresh.  Sending a full
 frame also takes longer (about 23 ms at 40 MHz) than one panel refresh.
 
+lvglterm
+--------
+
+A terminal on the display: NSH runs on a pseudo-terminal and is shown by
+the ``lvglterm`` example with LVGL, with an on-screen keyboard operated by
+touch.  A line is typed on the keyboard and sent with Enter::
+
+    nsh> lvglterm &
+
+The keys are small on the 2.16 inch display, so the terminal suits short
+commands best; the console on USB or the ``ssh`` configuration are more
+comfortable for typing.
+
 nsh
 ---
 
