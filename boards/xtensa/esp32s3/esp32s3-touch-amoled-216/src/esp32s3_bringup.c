@@ -333,5 +333,18 @@ int esp32s3_bringup(void)
    */
 
   UNUSED(ret);
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR
+  /* Display timeout and battery monitor; needs the LCD, touch and AXP2101
+   * devices initialized above.
+   */
+
+  ret = board_powermgr_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to start the power manager: %d\n",
+             ret);
+    }
+#endif
+
   return OK;
 }

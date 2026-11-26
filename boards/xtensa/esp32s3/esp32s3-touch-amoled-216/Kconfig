@@ -36,4 +36,93 @@ config ESP32S3_TOUCH_AMOLED_216_SPEAKER
 		speaker stays silent and draws no current unless explicitly
 		wanted.
 
+config ESP32S3_TOUCH_AMOLED_216_POWERMGR
+	bool "Power manager"
+	default n
+	depends on LCD_CO5300 || AXP2101_GAUGE
+	select SCHED_LPWORK
+	---help---
+		Turn the AMOLED display off after a period without touch or key
+		activity (which also prevents burn-in of a static image) and on
+		again at the next touch or key press, and watch the battery
+		while running on it: warn when it runs low and power the board
+		off cleanly before it is empty.
+
+if ESP32S3_TOUCH_AMOLED_216_POWERMGR
+
+config ESP32S3_TOUCH_AMOLED_216_POWERMGR_KEYS
+	bool
+	default y
+	depends on LCD_CO5300 && ESPRESSIF_GPIO_IRQ
+	select ARCH_BUTTONS
+	select ARCH_IRQBUTTONS
+	---help---
+		Key presses also turn the display on.
+
+config ESP32S3_TOUCH_AMOLED_216_SCREEN_TIMEOUT
+	int "Display timeout (seconds)"
+	default 60
+	range 0 86400
+	depends on LCD_CO5300
+	---help---
+		Turn the display off after this many seconds without touch or
+		key activity.  0 keeps the display on.
+
+config ESP32S3_TOUCH_AMOLED_216_SCREEN_TIMEOUT_USB
+	bool "Display timeout also on USB power"
+	default y
+	depends on LCD_CO5300 && AXP2101
+	---help---
+		Also turn the display off when the board is powered by USB.  If
+		disabled, the timeout only applies while running on battery.
+
+config ESP32S3_TOUCH_AMOLED_216_BATT_WARN
+	int "Low battery warning (percent)"
+	default 10
+	range 0 100
+	depends on AXP2101_GAUGE
+	---help---
+		Log a warning when the battery charge falls to this level while
+		running on battery.  0 disables the warning.
+
+config ESP32S3_TOUCH_AMOLED_216_BATT_WARN_MV
+	int "Low battery warning voltage (mV)"
+	default 3500
+	range 0 4200
+	depends on AXP2101_GAUGE
+	---help---
+		Also log the low battery warning when the battery voltage falls
+		to this level while running on battery.  0 disables it.
+
+config ESP32S3_TOUCH_AMOLED_216_BATT_OFF
+	int "Power off level (percent)"
+	default 3
+	range 0 100
+	depends on AXP2101_GAUGE && BOARDCTL_POWEROFF
+	---help---
+		Flush the file systems and power the board off when the battery
+		charge is at or below this level on two checks in a row while
+		running on battery.  0 disables the power off.
+
+config ESP32S3_TOUCH_AMOLED_216_BATT_OFF_MV
+	int "Power off voltage (mV)"
+	default 3300
+	range 0 4200
+	depends on AXP2101_GAUGE && BOARDCTL_POWEROFF
+	---help---
+		Also power off when the battery voltage is at or below this
+		level on two checks in a row while running on battery.  The
+		fuel gauge estimate depends on its battery model, the voltage
+		does not.  3300 mV leaves a margin above the power-off voltage
+		of the AXP2101 (CONFIG_AXP2101_VOFF_VOLTAGE) and the protection
+		circuit of the battery.  0 disables it.
+
+config ESP32S3_TOUCH_AMOLED_216_BATT_INTERVAL
+	int "Battery check interval (seconds)"
+	default 30
+	range 1 3600
+	depends on AXP2101_GAUGE
+
+endif # ESP32S3_TOUCH_AMOLED_216_POWERMGR
+
 endif # ARCH_BOARD_ESP32S3_TOUCH_AMOLED_216

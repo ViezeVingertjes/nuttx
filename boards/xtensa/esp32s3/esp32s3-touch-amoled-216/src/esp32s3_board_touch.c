@@ -74,10 +74,30 @@ static const struct cst92xx_config_s g_cst92xx_config =
  * Private Functions
  ****************************************************************************/
 
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR
+/* The touch interrupt is also reported to the power manager as activity */
+
+static xcpt_t g_tp_isr;
+static FAR void *g_tp_arg;
+
+static int tp_interrupt(int irq, FAR void *context, FAR void *arg)
+{
+  board_powermgr_activity();
+  return g_tp_isr != NULL ? g_tp_isr(irq, context, g_tp_arg) : OK;
+}
+#endif
+
 static int tp_attach(FAR const struct cst92xx_config_s *config,
                      xcpt_t isr, FAR void *arg)
 {
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR
+  g_tp_isr = isr;
+  g_tp_arg = arg;
+  return esp_gpio_irq(GPIO_TP_INT, isr != NULL ? tp_interrupt : NULL,
+                      NULL);
+#else
   return esp_gpio_irq(GPIO_TP_INT, isr, arg);
+#endif
 }
 
 static void tp_enable(FAR const struct cst92xx_config_s *config,

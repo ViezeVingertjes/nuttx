@@ -34,6 +34,10 @@ if(CONFIG_AUDIO_ES8311 OR CONFIG_AUDIO_ES7210)
   list(APPEND SRCS esp32s3_board_audio.c)
 endif()
 
+if(CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR)
+  list(APPEND SRCS esp32s3_board_powermgr.c)
+endif()
+
 if(CONFIG_ARCH_BUTTONS)
   list(APPEND SRCS esp32s3_buttons.c)
 endif()

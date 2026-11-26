@@ -77,9 +77,74 @@ static const struct button_desc_s g_buttons[NUM_BUTTONS] =
   },
 };
 
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR_KEYS
+static bool g_watching;
+static xcpt_t g_handler[NUM_BUTTONS];
+static FAR void *g_handlerarg[NUM_BUTTONS];
+#endif
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR_KEYS
+/****************************************************************************
+ * Name: button_interrupt
+ *
+ * Description:
+ *   Report the key event to the power manager and forward it to the
+ *   handler registered with board_button_irq(), if any.
+ *
+ ****************************************************************************/
+
+static int button_interrupt(int irq, FAR void *context, FAR void *arg)
+{
+  int id = (int)(intptr_t)arg;
+
+  board_powermgr_activity();
+  return g_handler[id] != NULL ?
+         g_handler[id](irq, context, g_handlerarg[id]) : OK;
+}
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR_KEYS
+/****************************************************************************
+ * Name: board_buttons_watch
+ *
+ * Description:
+ *   Attach and enable the key interrupts once, so that every key press is
+ *   reported to the power manager whether or not the buttons driver is in
+ *   use.
+ *
+ ****************************************************************************/
+
+void board_buttons_watch(void)
+{
+  int i;
+
+  if (g_watching)
+    {
+      return;
+    }
+
+  board_button_initialize();
+
+  for (i = 0; i < NUM_BUTTONS; i++)
+    {
+      if (esp_gpio_irq(g_buttons[i].gpio, button_interrupt,
+                       (FAR void *)(intptr_t)i) == OK)
+        {
+          esp_gpioirqenable(g_buttons[i].gpio);
+        }
+    }
+
+  g_watching = true;
+}
+#endif
 
 /****************************************************************************
  * Name: board_button_initialize
@@ -162,6 +227,22 @@ int board_button_irq(int id, xcpt_t irqhandler, void *arg)
     {
       return -EINVAL;
     }
+
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR_KEYS
+  /* The key interrupts are owned by board_buttons_watch(): just record the
+   * handler, button_interrupt() forwards to it.
+   */
+
+  if (g_watching)
+    {
+      irqstate_t flags = enter_critical_section();
+
+      g_handler[id]    = irqhandler;
+      g_handlerarg[id] = arg;
+      leave_critical_section(flags);
+      return OK;
+    }
+#endif
 
   return esp_gpio_irq(g_buttons[id].gpio, irqhandler, arg);
 }

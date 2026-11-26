@@ -64,6 +64,35 @@ its level to GPIO16, so the application can see it as a normal key, but
 the AXP2101 still acts on it: a long press powers the board off and a
 short press powers it back on.
 
+Power Manager
+=============
+
+``CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR`` enables a small power manager
+in the board support (``src/esp32s3_board_powermgr.c``):
+
+* The AMOLED display is turned off after
+  ``CONFIG_ESP32S3_TOUCH_AMOLED_216_SCREEN_TIMEOUT`` seconds (default 60)
+  without touch or key activity, and on again at the next touch or key
+  press.  Besides saving power, this prevents burn-in of a static image.
+  The timeout applies on USB power too, unless
+  ``CONFIG_ESP32S3_TOUCH_AMOLED_216_SCREEN_TIMEOUT_USB`` is disabled.  The
+  touch controller is kept active for this, even if no application uses
+  it.
+* While running on battery, the charge is checked every
+  ``CONFIG_ESP32S3_TOUCH_AMOLED_216_BATT_INTERVAL`` seconds (default 30):
+  a warning is logged at ``CONFIG_ESP32S3_TOUCH_AMOLED_216_BATT_WARN``
+  percent or ``CONFIG_ESP32S3_TOUCH_AMOLED_216_BATT_WARN_MV`` (defaults
+  10 % and 3500 mV), and at ``CONFIG_ESP32S3_TOUCH_AMOLED_216_BATT_OFF``
+  percent or ``CONFIG_ESP32S3_TOUCH_AMOLED_216_BATT_OFF_MV`` (defaults
+  3 % and 3300 mV) on two checks in a row the file systems are flushed and
+  the board is powered off through the AXP2101.  The voltage limits do not
+  depend on the battery model of the fuel gauge.  Connecting USB powers
+  the board on again.
+
+As a last resort, independent of the software, the AXP2101 itself powers
+the board off below ``CONFIG_AXP2101_VOFF_VOLTAGE`` (see the ``power``
+configuration).
+
 I2C Bus
 =======
 

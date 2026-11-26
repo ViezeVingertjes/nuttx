@@ -54,6 +54,9 @@
  ****************************************************************************/
 
 static FAR struct battery_charger_dev_s *g_axp2101;
+#ifdef CONFIG_AXP2101_GAUGE
+static FAR struct battery_gauge_dev_s *g_axp2101_gauge;
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -111,10 +114,32 @@ int board_axp2101_initialize(void)
     {
       return ret;
     }
+
+  g_axp2101_gauge = gauge;
 #endif
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: board_axp2101_charger
+ ****************************************************************************/
+
+FAR struct battery_charger_dev_s *board_axp2101_charger(void)
+{
+  return g_axp2101;
+}
+
+/****************************************************************************
+ * Name: board_axp2101_gauge
+ ****************************************************************************/
+
+#ifdef CONFIG_AXP2101_GAUGE
+FAR struct battery_gauge_dev_s *board_axp2101_gauge(void)
+{
+  return g_axp2101_gauge;
+}
+#endif
 
 /****************************************************************************
  * Name: board_power_off

@@ -51,6 +51,10 @@ else ifeq ($(CONFIG_AUDIO_ES7210),y)
 CSRCS += esp32s3_board_audio.c
 endif
 
+ifeq ($(CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR),y)
+CSRCS += esp32s3_board_powermgr.c
+endif
+
 ifeq ($(CONFIG_ARCH_BUTTONS),y)
 CSRCS += esp32s3_buttons.c
 endif

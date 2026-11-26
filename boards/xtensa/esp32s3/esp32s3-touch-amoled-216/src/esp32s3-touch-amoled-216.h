@@ -203,6 +203,53 @@ int board_touchscreen_initialize(void);
 int board_axp2101_initialize(void);
 #endif
 
+struct battery_charger_dev_s;
+struct battery_gauge_dev_s;
+
+/****************************************************************************
+ * Name: board_axp2101_charger / board_axp2101_gauge
+ *
+ * Description:
+ *   Return the AXP2101 battery charger and fuel gauge lower halves, or
+ *   NULL if they are not initialized.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_AXP2101
+FAR struct battery_charger_dev_s *board_axp2101_charger(void);
+#endif
+
+#ifdef CONFIG_AXP2101_GAUGE
+FAR struct battery_gauge_dev_s *board_axp2101_gauge(void);
+#endif
+
+/****************************************************************************
+ * Name: board_powermgr_initialize / board_powermgr_activity
+ *
+ * Description:
+ *   Start the power manager (display timeout and battery monitor), and
+ *   report touch or key activity to it.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR
+int board_powermgr_initialize(void);
+void board_powermgr_activity(void);
+#endif
+
+/****************************************************************************
+ * Name: board_buttons_watch
+ *
+ * Description:
+ *   Keep the key interrupts enabled and report every key press to the
+ *   power manager, whether or not the buttons driver is in use.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP32S3_TOUCH_AMOLED_216_POWERMGR_KEYS
+void board_buttons_watch(void);
+#endif
+
 /****************************************************************************
  * Name: board_audio_initialize
  *
