@@ -245,15 +245,15 @@ fbcon
 -----
 
 The NuttShell on the display: the ``fbcon`` example starts NSH and shows
-its output on the framebuffer ``/dev/fb0``, using the whole display with
-the 10x20 font (48 columns, 24 lines).  Input comes from the console it
-was started from, e.g. the USB console::
+its output on the framebuffer ``/dev/fb0`` with the 10x20 font (45
+columns, 22 lines).  The console is kept 13 pixels inside the display
+edges (``CONFIG_EXAMPLES_FBCON_MARGIN``), so that the rounded corners of
+the panel do not hide any text.  Input comes from the console it was
+started from, e.g. the USB console::
 
     nsh> fbcon
 
-The panel has rounded corners, so the first characters of the top and
-bottom lines are partly hidden.  For a terminal with input on the
-display itself, see ``lvglterm``.
+For a terminal with input on the display itself, see ``lvglterm``.
 
 i2c
 ---
