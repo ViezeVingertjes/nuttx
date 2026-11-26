@@ -404,6 +404,44 @@ before the board boots::
       Filesystem      Size      Used  Available Mounted on
       vfat           3580M     1040K      3579M /mnt
 
+ssh
+---
+
+This configuration provides NuttShell over SSH: the Dropbear SSH server
+(port 2222) runs NSH sessions over Wi-Fi, with password logins checked
+against ``/data/passwd`` and the host key kept in ``/data``, both on the
+SPI flash file system.  The 8MB PSRAM holds the user heap.
+
+The Wi-Fi credentials are not part of the configuration.  Set them once
+on the USB console and save them to ``/data/wapi.conf``; from then on the
+board connects at boot (in the background, so NSH is available right
+away) and gets its address with DHCP.  Then create a user::
+
+    nsh> wapi psk wlan0 mypasswd 3
+    nsh> wapi essid wlan0 myssid 1
+    nsh> renew wlan0
+    nsh> wapi save_config wlan0
+    nsh> useradd myuser My-Passw0rd
+
+The password must contain at least 8 characters, with upper and lower
+case letters, a digit and a special character.  Then log in from the
+host::
+
+    $ ssh -p 2222 myuser@<board-ip>
+
+The host key is created at the first start.  When no program reads the
+USB console, its output is dropped, so the board also works stand-alone.
+
+The configuration is set up for running on battery: Wi-Fi modem sleep
+(minimum power saving: the radio sleeps between the beacons of the access
+point, so the board stays reachable with some extra latency), the CPU at
+80 MHz, and the power manager (see above) with the display, touch and
+AXP2101 enabled.  Measured at the USB input with a full battery, idle with
+Wi-Fi connected: about 26 mA with Wi-Fi power saving at 80 MHz and the
+display off (95 mA without power saving at 240 MHz), about 55 mA with the
+display on.  A login then takes about four seconds, mostly for the key
+exchange; select 160 or 240 MHz for faster logins.
+
 touch
 -----
 
