@@ -332,6 +332,11 @@ used to exercise it::
           total       used       free    maxused    maxfree  nused  nfree name
         8775692      23020    8752672      23400    8388592     75      4 Umem
 
+The PSRAM runs at 80 MHz with a 64 KiB data cache (64-byte lines), which
+copies data in PSRAM about 2.6 times as fast as the defaults (40 MHz,
+32 KiB).  The ``lcd``, ``lvgl`` and ``audio`` configurations use the same
+settings.  All configurations read the flash in QIO mode at 80 MHz.
+
 rtc
 ---
 
