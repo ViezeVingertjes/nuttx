@@ -39,6 +39,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/serial/serial.h>
 #include <nuttx/serial/tioctl.h>
+#include <nuttx/wdog.h>
 #include <arch/irq.h>
 
 #include "xtensa.h"
@@ -57,6 +58,13 @@
 
 #define ESP32S3_USBCDC_BUFFERSIZE 64
 
+/* If the host does not read the IN endpoint for this long (e.g. no
+ * terminal has the port open, or no host is connected at all), console
+ * output is dropped instead of blocking every task that writes to it.
+ */
+
+#define USBSERIAL_TX_TIMEOUT_MS 50
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -67,6 +75,8 @@ struct esp32s3_priv_s
   const uint8_t  irq;           /* IRQ number assigned to the peripheral */
   int            cpu;           /* CPU id */
   int            cpuint;        /* CPU interrupt assigned */
+  struct wdog_s  txdog;         /* Detects a host that does not read */
+  volatile bool  txdrop;        /* Host does not read: drop output */
 };
 
 /****************************************************************************
@@ -219,12 +229,63 @@ static void esp32s3_shutdown(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
+static bool esp32s3_txfree(void)
+{
+  return (getreg32(USB_SERIAL_JTAG_EP1_CONF_REG) &
+          USB_SERIAL_JTAG_SERIAL_IN_EP_DATA_FREE) != 0;
+}
+
+/****************************************************************************
+ * Name: esp32s3_txtimeout
+ *
+ * Description:
+ *   The IN endpoint FIFO stayed full: the host does not read.  Drop the
+ *   pending output so that the writers are not blocked, until the host
+ *   reads again.
+ *
+ ****************************************************************************/
+
+static void esp32s3_txtimeout(wdparm_t arg)
+{
+  struct uart_dev_s *dev = (struct uart_dev_s *)arg;
+  struct esp32s3_priv_s *priv = dev->priv;
+
+  if (!esp32s3_txfree())
+    {
+      priv->txdrop = true;
+      uart_xmitchars(dev);
+    }
+}
+
+/****************************************************************************
+ * Name: esp32s3_txint
+ ****************************************************************************/
+
 static void esp32s3_txint(struct uart_dev_s *dev, bool enable)
 {
+  struct esp32s3_priv_s *priv = dev->priv;
+
   if (enable)
     {
       modifyreg32(USB_SERIAL_JTAG_INT_ENA_REG, 0,
                   USB_SERIAL_JTAG_SERIAL_IN_EMPTY_INT_ENA);
+
+      /* The FIFO-empty interrupt only comes if the host reads.  Drop the
+       * output right away if it is known not to, or detect it otherwise.
+       */
+
+      if (!esp32s3_txfree())
+        {
+          if (priv->txdrop)
+            {
+              uart_xmitchars(dev);
+            }
+          else if (!WDOG_ISACTIVE(&priv->txdog))
+            {
+              wd_start(&priv->txdog, MSEC2TICK(USBSERIAL_TX_TIMEOUT_MS),
+                       esp32s3_txtimeout, (wdparm_t)dev);
+            }
+        }
     }
   else
     {
@@ -397,11 +458,17 @@ static bool esp32s3_txempty(struct uart_dev_s *dev)
 
 static bool esp32s3_txready(struct uart_dev_s *dev)
 {
-  uint32_t regval;
+  struct esp32s3_priv_s *priv = dev->priv;
 
-  regval = getreg32(USB_SERIAL_JTAG_EP1_CONF_REG);
+  /* The host reads again: stop dropping the output */
 
-  return regval & USB_SERIAL_JTAG_SERIAL_IN_EP_DATA_FREE;
+  if (esp32s3_txfree())
+    {
+      priv->txdrop = false;
+      return true;
+    }
+
+  return priv->txdrop;
 }
 
 /****************************************************************************
@@ -414,6 +481,13 @@ static bool esp32s3_txready(struct uart_dev_s *dev)
 
 static void esp32s3_send(struct uart_dev_s *dev, int ch)
 {
+  /* Drop the character if the host does not read (see txready()) */
+
+  if (!esp32s3_txfree())
+    {
+      return;
+    }
+
   /* Write the character to the buffer. */
 
   putreg32(ch, USB_SERIAL_JTAG_EP1_REG);
@@ -504,7 +578,24 @@ static int esp32s3_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 void esp32s3_usbserial_write(char ch)
 {
-  while (!esp32s3_txready(&g_uart_usbserial));
+  struct esp32s3_priv_s *priv = &g_usbserial_priv;
+  int timeout = USBSERIAL_TX_TIMEOUT_MS * 1000;
 
-  esp32s3_send(&g_uart_usbserial, ch);
+  /* Wait for room in the FIFO, but not forever if the host does not read */
+
+  while (!priv->txdrop && !esp32s3_txfree())
+    {
+      if (--timeout <= 0)
+        {
+          priv->txdrop = true;
+          break;
+        }
+
+      up_udelay(1);
+    }
+
+  if (esp32s3_txready(&g_uart_usbserial))
+    {
+      esp32s3_send(&g_uart_usbserial, ch);
+    }
 }
