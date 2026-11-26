@@ -22,6 +22,7 @@ Features
 
   - ESP32-S3R8, dual core Xtensa LX7 at up to 240 MHz, with 8MB octal PSRAM
   - 16MB quad SPI flash
+  - 2.4 GHz Wi-Fi and Bluetooth LE with an on-board antenna
   - 2.16 inch 480x480 AMOLED, CO5300 controller on a QSPI bus
   - CST9220 capacitive touch controller
   - AXP2101 power management IC with Li-ion battery charger
@@ -196,6 +197,29 @@ and to record from the microphones (2 channels, 16 bit, 16 kHz)::
 The nxplayer ``tone`` command sends raw PCM without a WAV header, which the
 PCM decoder in front of the ES8311 only accepts with
 ``CONFIG_AUDIO_FORMAT_RAW``.
+
+ble
+---
+
+Enables Bluetooth Low Energy (the ESP32-S3 has no Bluetooth Classic) with
+the ``btsak`` tool on the ``bnep0`` interface.  Show the controller
+information, scan for nearby devices and advertise as ``btsak``::
+
+    nsh> bt bnep0 info
+    nsh> bt bnep0 scan start
+    nsh> bt bnep0 scan get
+    nsh> bt bnep0 scan stop
+    nsh> bt bnep0 advertise start
+
+The controller rejects the host buffer size of the NuttX Bluetooth host,
+so it runs without Controller to Host flow control; a warning about this
+is logged at boot.
+
+Wi-Fi and BLE share the radio.  When both are enabled,
+``CONFIG_ESPRESSIF_WIFI_BT_COEXIST`` is selected by default and they work
+at the same time: with the ``ssh`` configuration plus BLE, scanning and
+advertising added about 20 ms to the average Wi-Fi round trip time, with
+no lost packets and working SSH logins.
 
 buttons
 -------
